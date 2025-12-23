@@ -13,27 +13,24 @@ st.title("🎓 Sistema de Alocação de Salas Inteligente (Conectado ao Google S
 OPCOES_RECURSOS = ["Projetor", "Quadro", "Laboratório", "Computadores", "Mesas", "Cadeiras"]
 
 # --- CONEXÃO COM GOOGLE SHEETS ---
-# Cria a conexão usando os segredos configurados
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Função para carregar dados (cache de 2 segundos para garantir atualização rápida)
 def carregar_dados():
     try:
+        # ttl=2 garante que ele busque dados novos quase sempre que recarregar
         return conn.read(worksheet="Salas", ttl=2)
     except Exception as e:
         st.error(f"Erro ao conectar com Google Sheets: {e}")
         return pd.DataFrame(columns=['Código', 'Descrição', 'Ambiente', 'Capacidade', 'Recursos'])
 
-# Função para SALVAR dados no Google Sheets
 def salvar_no_gsheets(df):
     try:
         conn.update(worksheet="Salas", data=df)
-        st.toast("✅ Alterações salvas no Google Sheets!", icon="☁️")
+        st.toast("✅ Google Sheets atualizado com sucesso!", icon="☁️")
     except Exception as e:
-        st.error(f"Erro ao salvar: {e}")
+        st.error(f"Erro ao salvar na nuvem: {e}")
 
 # --- 0. Inicialização da "Memória" ---
-# Se não tiver carregado ainda, busca do Sheets
 if 'df_salas' not in st.session_state:
     st.session_state.df_salas = carregar_dados()
 
@@ -63,9 +60,7 @@ def modal_adicionar_sala():
                     'Código': cod, 'Descrição': desc, 'Ambiente': amb, 
                     'Capacidade': cap, 'Recursos': rec_str
                 }])
-                # Atualiza memória local
                 st.session_state.df_salas = pd.concat([st.session_state.df_salas, nova_linha], ignore_index=True)
-                # SALVA NA NUVEM
                 salvar_no_gsheets(st.session_state.df_salas)
                 st.rerun()
             else:
@@ -103,7 +98,6 @@ def modal_editar_sala(index_selecionado):
         st.session_state.df_salas.at[index_selecionado, 'Capacidade'] = novo_cap
         st.session_state.df_salas.at[index_selecionado, 'Recursos'] = ", ".join(novos_recursos)
         
-        # SALVA NA NUVEM
         salvar_no_gsheets(st.session_state.df_salas)
         st.rerun()
 
@@ -118,19 +112,17 @@ def modal_excluir_sala(index_selecionado):
     col_sim, col_nao = st.columns(2)
     if col_sim.button("Sim, Excluir", type="primary"):
         st.session_state.df_salas = st.session_state.df_salas.drop(index_selecionado).reset_index(drop=True)
-        # SALVA NA NUVEM
         salvar_no_gsheets(st.session_state.df_salas)
         st.rerun()
     
     if col_nao.button("Cancelar"):
         st.rerun()
 
-# --- LÓGICA DE ALOCAÇÃO (MANTIDA) ---
+# --- LÓGICA DE ALOCAÇÃO ---
 def verificar_conflito_horario(t1_inicio, t1_fim, t2_inicio, t2_fim):
     return max(t1_inicio, t2_inicio) < min(t1_fim, t2_fim)
 
 def alocar_salas(df_turmas, df_salas):
-    # (Mantive a mesma lógica da sua versão anterior)
     alocacoes = []
     ocupacao_salas = {codigo: [] for codigo in df_salas['Código'].unique()}
     
@@ -196,8 +188,42 @@ col1, col2 = st.columns([1.2, 1.5], gap="large")
 with col1:
     st.subheader("1. Gerenciar Salas (Google Sheets)")
     
-    # Botão para recarregar manualmente do Google Sheets
-    if st.button("🔄 Recarregar Dados da Nuvem"):
+    # --- [RESTAURADO] ÁREA DE IMPORTAR/EXPORTAR EXCEL DE SALAS ---
+    with st.expander("📂 Importar/Exportar Excel de Salas"):
+        st.info("Você pode baixar as salas atuais ou subir uma planilha nova para **sobrescrever** o Google Sheets.")
+        
+        # 1. DOWNLOAD
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            st.session_state.df_salas.to_excel(writer, index=False)
+        
+        st.download_button(
+            label="⬇️ Baixar Salas Atuais (.xlsx)",
+            data=buffer.getvalue(),
+            file_name="backup_salas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        
+        # 2. UPLOAD (IMPORTANTE: Atualiza o Google Sheets)
+        upload_salas_update = st.file_uploader("Subir Planilha para Atualizar o Banco de Dados", type=['xlsx'], key="upload_salas_update")
+        
+        if upload_salas_update:
+            try:
+                df_novo = pd.read_excel(upload_salas_update)
+                colunas_esperadas = ['Código', 'Descrição', 'Ambiente', 'Capacidade', 'Recursos']
+                if all(col in df_novo.columns for col in colunas_esperadas):
+                    if st.button("⚠️ Confirmar Sobrescrita do Banco de Dados", type="primary"):
+                        st.session_state.df_salas = df_novo
+                        salvar_no_gsheets(df_novo) # Salva direto no Sheets
+                        st.success("Google Sheets atualizado com sucesso!")
+                        st.rerun()
+                else:
+                    st.error(f"A planilha precisa ter as colunas: {', '.join(colunas_esperadas)}")
+            except Exception as e:
+                st.error(f"Erro ao ler arquivo: {e}")
+
+    # Botão manual de recarregar
+    if st.button("🔄 Recarregar Dados da Nuvem", help="Força a atualização dos dados do Google Sheets"):
         st.session_state.df_salas = carregar_dados()
         st.rerun()
 
@@ -220,23 +246,50 @@ with col1:
 
 with col2:
     st.subheader("2. Upload de Turmas")
-    with st.expander("📝 Baixar Modelo de Turmas"):
-        # (Código de download do modelo mantido igual, omitido para economizar espaço mas deve estar aqui)
-        # Se quiser que eu repita o bloco do download me avise, mas é o mesmo do anterior.
-        st.info("Use o modelo padrão para garantir a importação.")
+    
+    # --- [RESTAURADO] BOTÃO DE MODELO DE TURMAS ---
+    with st.expander("📝 Baixar Modelo de Planilha de Turmas"):
+        st.markdown("""
+        Baixe este modelo para preencher suas turmas corretamente.\n
+        **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula.
+        Ex: `Segunda, Quarta`.
+        """)
+        
+        df_modelo_turmas = pd.DataFrame({
+            'Codigo': ['MAT-101', 'MEC-202', 'FIS-303'],
+            'Nome': ['Cálculo I', 'Termodinâmica', 'Física Experimental'],
+            'Professor': ['João Silva', 'Maria Santos', 'Pedro Souza'],
+            'Qtd_Alunos': [45, 20, 15],
+            'Inicio': ['08:00', '10:00', '14:00'],
+            'Fim': ['10:00', '12:00', '16:00'],
+            'Dia': ['Segunda, Quarta', 'Terça', 'Sexta'],
+            'Necessidades': ['Projetor', 'Laboratório', '']
+        })
+        
+        buffer_turmas = io.BytesIO()
+        with pd.ExcelWriter(buffer_turmas, engine='openpyxl') as writer:
+            df_modelo_turmas.to_excel(writer, index=False)
+            
+        st.download_button(
+            label="⬇️ Baixar Modelo de Turmas (.xlsx)",
+            data=buffer_turmas.getvalue(),
+            file_name="modelo_importacao_turmas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
         
     upload_arquivo = st.file_uploader("Subir arquivo Excel das Matérias", type=['xlsx'])
     if upload_arquivo:
         try:
             df_turmas = pd.read_excel(upload_arquivo)
+            st.write("Prévia:")
+            st.dataframe(df_turmas.head(3), hide_index=True)
+            
             if st.button("🚀 Processar Alocação", type="primary"):
-                # Validação e Processamento (Mantidos)
                 colunas_necessarias = ['Codigo', 'Nome', 'Professor', 'Qtd_Alunos', 'Inicio', 'Fim', 'Dia']
                 if all(col in df_turmas.columns for col in colunas_necessarias):
                     resultado = alocar_salas(df_turmas, st.session_state.df_salas)
                     st.divider()
                     st.subheader("3. Resultados")
-                    # (Exibição dos resultados mantida)
                     st.dataframe(resultado, use_container_width=True, hide_index=True)
                 else:
                     st.error("Colunas incorretas.")
