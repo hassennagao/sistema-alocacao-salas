@@ -7,7 +7,7 @@ from streamlit_gsheets import GSheetsConnection
 # --- Configuração da Página ---
 st.set_page_config(page_title="Alocação de Salas", layout="wide")
 
-st.title("🎓 Sistema de Alocação de Salas Inteligente (Conectado ao Google Sheets)")
+st.title("🎓 Sistema de Alocação de Salas Inteligente")
 
 # --- LISTA DE RECURSOS DISPONÍVEIS ---
 OPCOES_RECURSOS = ["Projetor", "Quadro", "Laboratório", "Computadores", "Mesas", "Cadeiras"]
@@ -186,7 +186,7 @@ def alocar_salas(df_turmas, df_salas):
 col1, col2 = st.columns([1.2, 1.5], gap="large")
 
 with col1:
-    st.subheader("1. Gerenciar Salas (Google Sheets)")
+    st.subheader("1. Gerenciar Salas")
     
     # --- [RESTAURADO] ÁREA DE IMPORTAR/EXPORTAR EXCEL DE SALAS ---
     with st.expander("📂 Importar/Exportar Excel de Salas"):
