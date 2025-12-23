@@ -3,11 +3,12 @@ import pandas as pd
 from datetime import datetime
 import io
 from streamlit_gsheets import GSheetsConnection
+from openpyxl.styles import Alignment # Importante para formatar o Excel final
 
 # --- Configuração da Página ---
 st.set_page_config(page_title="Alocação de Salas", layout="wide")
 
-st.title("🎓 Sistema de Alocação de Salas Inteligente")
+st.title("🎓 Sistema de Alocação de Salas Inteligente (Conectado ao Google Sheets)")
 
 # --- LISTA DE RECURSOS DISPONÍVEIS ---
 OPCOES_RECURSOS = ["Projetor", "Quadro", "Laboratório", "Computadores", "Mesas", "Cadeiras"]
@@ -17,7 +18,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def carregar_dados():
     try:
-        # ttl=2 garante que ele busque dados novos quase sempre que recarregar
         return conn.read(worksheet="Salas", ttl=2)
     except Exception as e:
         st.error(f"Erro ao conectar com Google Sheets: {e}")
@@ -186,9 +186,8 @@ def alocar_salas(df_turmas, df_salas):
 col1, col2 = st.columns([1.2, 1.5], gap="large")
 
 with col1:
-    st.subheader("1. Gerenciar Salas")
+    st.subheader("1. Gerenciar Salas (Google Sheets)")
     
-    # --- [RESTAURADO] ÁREA DE IMPORTAR/EXPORTAR EXCEL DE SALAS ---
     with st.expander("📂 Importar/Exportar Excel de Salas"):
         st.info("Você pode baixar as salas atuais ou subir uma planilha nova para **sobrescrever** o Google Sheets.")
         
@@ -196,7 +195,7 @@ with col1:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             st.session_state.df_salas.to_excel(writer, index=False)
-        
+            
         st.download_button(
             label="⬇️ Baixar Salas Atuais (.xlsx)",
             data=buffer.getvalue(),
@@ -204,7 +203,7 @@ with col1:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         
-        # 2. UPLOAD (IMPORTANTE: Atualiza o Google Sheets)
+        # 2. UPLOAD
         upload_salas_update = st.file_uploader("Subir Planilha para Atualizar o Banco de Dados", type=['xlsx'], key="upload_salas_update")
         
         if upload_salas_update:
@@ -214,7 +213,7 @@ with col1:
                 if all(col in df_novo.columns for col in colunas_esperadas):
                     if st.button("⚠️ Confirmar Sobrescrita do Banco de Dados", type="primary"):
                         st.session_state.df_salas = df_novo
-                        salvar_no_gsheets(df_novo) # Salva direto no Sheets
+                        salvar_no_gsheets(df_novo)
                         st.success("Google Sheets atualizado com sucesso!")
                         st.rerun()
                 else:
@@ -222,8 +221,7 @@ with col1:
             except Exception as e:
                 st.error(f"Erro ao ler arquivo: {e}")
 
-    # Botão manual de recarregar
-    if st.button("🔄 Recarregar Dados da Nuvem", help="Força a atualização dos dados do Google Sheets"):
+    if st.button("🔄 Recarregar Dados da Nuvem"):
         st.session_state.df_salas = carregar_dados()
         st.rerun()
 
@@ -247,13 +245,10 @@ with col1:
 with col2:
     st.subheader("2. Upload de Turmas")
     
-    # --- [RESTAURADO] BOTÃO DE MODELO DE TURMAS ---
     with st.expander("📝 Baixar Modelo de Planilha de Turmas"):
         st.markdown("""
         Baixe este modelo para preencher suas turmas corretamente.\n
-        **Respeite os cabeçalhos e lembre-se de apagar as linhas de exemplo.** \n
-        **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula.
-        Ex: `Segunda, Quarta`.
+        **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula. Ex: `Segunda, Quarta`.
         """)
         
         df_modelo_turmas = pd.DataFrame({
@@ -292,6 +287,32 @@ with col2:
                     st.divider()
                     st.subheader("3. Resultados da Alocação")
                     st.dataframe(resultado, use_container_width=True, hide_index=True)
+                    
+                    # --- BOTÃO DE DOWNLOAD DO RESULTADO FINAL ---
+                    if not resultado.empty:
+                        buffer_result = io.BytesIO()
+                        with pd.ExcelWriter(buffer_result, engine='openpyxl') as writer:
+                            resultado.to_excel(writer, index=False, sheet_name="Alocação")
+                            
+                            # Formatação simples (Quebra de texto e largura de coluna)
+                            worksheet = writer.sheets['Alocação']
+                            for row in worksheet.iter_rows():
+                                for cell in row:
+                                    cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='left')
+                            
+                            # Ajusta largura padrão das colunas
+                            for col in worksheet.columns:
+                                column = col[0].column_letter
+                                worksheet.column_dimensions[column].width = 25
+                        
+                        st.download_button(
+                            label="📥 Baixar Resultado em Excel (.xlsx)",
+                            data=buffer_result.getvalue(),
+                            file_name="resultado_alocacao.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            type="primary"
+                        )
+
                 else:
                     st.error("Colunas incorretas.")
         except Exception as e:
