@@ -251,6 +251,7 @@ with col2:
     with st.expander("📝 Baixar Modelo de Planilha de Turmas"):
         st.markdown("""
         Baixe este modelo para preencher suas turmas corretamente.\n
+        **Respeite os cabeçalhos e lembre-se de apagar as linhas de exemplo.** \n
         **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula.
         Ex: `Segunda, Quarta`.
         """)
@@ -289,7 +290,7 @@ with col2:
                 if all(col in df_turmas.columns for col in colunas_necessarias):
                     resultado = alocar_salas(df_turmas, st.session_state.df_salas)
                     st.divider()
-                    st.subheader("3. Resultados")
+                    st.subheader("3. Resultados da Alocação")
                     st.dataframe(resultado, use_container_width=True, hide_index=True)
                 else:
                     st.error("Colunas incorretas.")
