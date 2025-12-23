@@ -8,7 +8,7 @@ from openpyxl.styles import Alignment # Importante para formatar o Excel final
 # --- Configuração da Página ---
 st.set_page_config(page_title="Alocação de Salas", layout="wide")
 
-st.title("🎓 Sistema de Alocação de Salas Inteligente (Conectado ao Google Sheets)")
+st.title("🎓 Sistema de Alocação de Salas Inteligente")
 
 # --- LISTA DE RECURSOS DISPONÍVEIS ---
 OPCOES_RECURSOS = ["Projetor", "Quadro", "Laboratório", "Computadores", "Mesas", "Cadeiras"]
@@ -186,10 +186,10 @@ def alocar_salas(df_turmas, df_salas):
 col1, col2 = st.columns([1.2, 1.5], gap="large")
 
 with col1:
-    st.subheader("1. Gerenciar Salas (Google Sheets)")
+    st.subheader("1. Gerenciar Salas")
     
     with st.expander("📂 Importar/Exportar Excel de Salas"):
-        st.info("Você pode baixar as salas atuais ou subir uma planilha nova para **sobrescrever** o Google Sheets.")
+        st.info("Você pode baixar as salas atuais ou subir uma planilha nova para **sobrescrever** o banco de dados.")
         
         # 1. DOWNLOAD
         buffer = io.BytesIO()
@@ -197,7 +197,7 @@ with col1:
             st.session_state.df_salas.to_excel(writer, index=False)
             
         st.download_button(
-            label="⬇️ Baixar Salas Atuais (.xlsx)",
+            label="⬇️ Baixar Modelo Atual (com salas cadastradas)",
             data=buffer.getvalue(),
             file_name="backup_salas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -211,7 +211,7 @@ with col1:
                 df_novo = pd.read_excel(upload_salas_update)
                 colunas_esperadas = ['Código', 'Descrição', 'Ambiente', 'Capacidade', 'Recursos']
                 if all(col in df_novo.columns for col in colunas_esperadas):
-                    if st.button("⚠️ Confirmar Sobrescrita do Banco de Dados", type="primary"):
+                    if st.button("Confirmar Atualização de Salas", type="primary"):
                         st.session_state.df_salas = df_novo
                         salvar_no_gsheets(df_novo)
                         st.success("Google Sheets atualizado com sucesso!")
@@ -248,7 +248,8 @@ with col2:
     with st.expander("📝 Baixar Modelo de Planilha de Turmas"):
         st.markdown("""
         Baixe este modelo para preencher suas turmas corretamente.\n
-        **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula. Ex: `Segunda, Quarta`.
+        **Respeite os cabeçalhos e lembre-se de apagar as linhas de exemplo.** \n
+        **Dica:** Você pode colocar múltiplos dias na mesma linha separando por vírgula. Ex: `Segunda, Quarta` ou `Terça  / Quinta`.
         """)
         
         df_modelo_turmas = pd.DataFrame({
